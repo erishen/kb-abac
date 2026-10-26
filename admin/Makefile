@@ -13,15 +13,16 @@
 # shared/ 与 admin/ 都在），故这里不重复 docker 目标。
 #
 # lume 工具链位置（构建 / 运行 / 单测都需要）。解析优先级：
-#   ① 环境变量或命令行 LUME_DIR（如 `make dev LUME_DIR=/abs/path/to/lume`）；
-#   ② 默认的相对路径 ../../lume/lume 指向「与 lume 源码树同级」的本地布局；
-#   ③ 若默认路径不存在，自动回退到 PATH 上的 `lume`（装好 lume 即可零配置）。
+#   ① 命令行/环境变量 LUME=/abs/path/to/lume（最高优先，覆盖一切）；
+#   ② PATH 上的 `lume`（装好 lume 即可零配置）；
+#   ③ 本地 monorepo 布局：<仓库根>/../../lume/lume/bin/lume（仅本机源码树）。
+# 本文件位于仓库根下的 admin/，所以 ROOT 取 CWD 的上一级再算 lume 路径，
+# 统一解析为绝对路径，避免被 `make -C admin` 调用时相对基准错一层。
 # make 不读 .env；覆盖请用环境变量或命令行。
-LUME_DIR  ?= ../../lume/lume
-ifeq ($(wildcard $(LUME_DIR)/bin/lume),)
-  LUME      := $(if $(shell command -v lume 2>/dev/null),lume,$(LUME_DIR)/bin/lume)
-else
-  LUME      := $(LUME_DIR)/bin/lume
+ROOT := $(CURDIR)/..
+LUME  ?= $(shell command -v lume 2>/dev/null)
+ifeq ($(LUME),)
+  LUME  := $(abspath $(ROOT)/../../lume/lume)/bin/lume
 endif
 SCRIPT    := server.lume
 SHARED_DIR ?= ../shared

@@ -12,14 +12,14 @@
 #   make docker-stop  停容器（卷 kb-auth-shared 保留）
 
 # lume 工具链位置（构建 / 运行 / 单测都需要）。解析优先级：
-#   ① 环境变量或命令行 LUME_DIR（如 `make test LUME_DIR=/abs/path/to/lume`）；
-#   ② 默认相对路径 ../../lume/lume（与 lume 源码树同级的本地布局）；
-#   ③ 若默认路径不存在，自动回退到 PATH 上的 `lume`（公开克隆装好 lume 即可零配置）。
-LUME_DIR ?= ../../lume/lume
-ifeq ($(wildcard $(LUME_DIR)/bin/lume),)
-  LUME := $(if $(shell command -v lume 2>/dev/null),lume,$(LUME_DIR)/bin/lume)
-else
-  LUME := $(LUME_DIR)/bin/lume
+#   ① 命令行/环境变量 LUME=/abs/path/to/lume（最高优先，覆盖一切）；
+#   ② PATH 上的 `lume`（公开克隆装好 lume 即可零配置）；
+#   ③ 本地 monorepo 布局：<仓库根>/../../lume/lume/bin/lume（仅本机源码树）。
+# 统一解析为绝对路径，避免 dev 目标 `cd admin` 后相对路径基准失效。
+ROOT := $(CURDIR)
+LUME ?= $(shell command -v lume 2>/dev/null)
+ifeq ($(LUME),)
+  LUME := $(abspath $(ROOT)/../../lume/lume)/bin/lume
 endif
 
 SHARED := shared

@@ -18,13 +18,17 @@
 # ——拿夹具当草稿纸的话，这一遍会把夹具改掉，后面 local/central 两遍就失真了。
 # 详见 tools/test-abac.lume 头注释。
 
-# lume 工具链位置：默认相对路径 ../../lume/lume，不存在时回退到 PATH 上的 lume；
-# 也可用 LUME_DIR=/abs/path 覆盖（make 不读 .env，请用环境变量或命令行）。
-LUME_DIR ?= ../../lume/lume
-ifeq ($(wildcard $(LUME_DIR)/bin/lume),)
-  LUME     := $(if $(shell command -v lume 2>/dev/null),lume,$(LUME_DIR)/bin/lume)
-else
-  LUME     := $(LUME_DIR)/bin/lume
+# lume 工具链位置：解析优先级
+#   ① 命令行/环境变量 LUME=/abs/path/to/lume（最高优先）；
+#   ② PATH 上的 `lume`（装好 lume 即可零配置）；
+#   ③ 本地 monorepo 布局：<仓库根>/../../lume/lume/bin/lume（仅本机源码树）。
+# 本文件位于仓库根下的 shared/，故 ROOT 取 CWD 的上一级再算 lume 路径，
+# 统一解析为绝对路径，避免被 `make -C shared` 调用时相对基准错一层。
+# 也可用 LUME=/abs/path 覆盖（make 不读 .env，请用环境变量或命令行）。
+ROOT := $(CURDIR)/..
+LUME  ?= $(shell command -v lume 2>/dev/null)
+ifeq ($(LUME),)
+  LUME  := $(abspath $(ROOT)/../../lume/lume)/bin/lume
 endif
 
 # 审计写到临时目录，不污染 fixtures（引擎里的 ABAC_AUDIT_PATH 就是为此存在）。
