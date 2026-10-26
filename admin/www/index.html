@@ -28,10 +28,16 @@
   button { margin-top: 14px; background: #2563eb; color: #fff; border: none; padding: 9px 18px; border-radius: 6px; font-size: 14px; cursor: pointer; }
   button.sec { background: #6b7280; }
   button:hover { filter: brightness(1.05); }
-  #result { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; white-space: pre-wrap; display: none; }
+  button:disabled { opacity: .6; cursor: default; }
+  #statusbar { margin: 14px 0 0; padding: 10px 14px; border-radius: 8px; font-size: 13px; }
+  #statusbar.ok { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
+  #statusbar.bad { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+  #statusbar.pending { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+  .result { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; white-space: pre-wrap; }
   .permit { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
   .deny   { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
   .err    { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+  .info   { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
   .foot { color: #9ca3af; font-size: 12px; margin-top: 28px; }
   a { color: #2563eb; }
 </style>
@@ -41,11 +47,7 @@
   <h1>kb-auth · demo</h1>
   <p class="sub">集中 ABAC 管理服务（演示版）—— 一个 <code>admin</code> 服务 + 被它 import 的 <code>shared</code> 决策引擎，同源、同决策逻辑。</p>
 
-  <h2>服务状态</h2>
-  <div class="card">
-    <button id="healthBtn">检查 /api/health</button>
-    <div id="health" class="result" style="display:none"></div>
-  </div>
+  <div id="statusbar" class="pending">正在探测 /api/health …</div>
 
   <h2>API 端点</h2>
   <table>
@@ -86,7 +88,13 @@
     </div>
     <button id="authBtn">发起决策请求</button>
     <button id="resetBtn" class="sec">恢复示例</button>
-    <div id="result"></div>
+    <div id="result" class="result info" style="display:none"></div>
+  </div>
+
+  <h2>服务状态</h2>
+  <div class="card">
+    <button id="healthBtn">检查 /api/health</button>
+    <div id="health" class="result info" style="display:none"></div>
   </div>
 
   <p class="foot">
@@ -96,6 +104,12 @@
 </div>
 
 <script>
+  // 任何脚本错误都显眼地显示出来，避免“按钮没反应”却无提示。
+  window.addEventListener('error', (e) => {
+    const bar = document.getElementById('statusbar');
+    if (bar) { bar.className = 'bad'; bar.textContent = '页面脚本出错: ' + (e.message || e.error); }
+  });
+
   const $ = (id) => document.getElementById(id);
 
   function show(el, cls, text) {
@@ -103,10 +117,28 @@
     el.style.display = 'block';
     el.textContent = text;
   }
+  function setStatus(cls, text) {
+    const bar = $('statusbar');
+    bar.className = cls;
+    bar.textContent = text;
+  }
+
+  async function pingHealth() {
+    try {
+      const r = await fetch('/api/health', { cache: 'no-store' });
+      const data = await r.json();
+      setStatus('ok', '✅ 已连接服务端: ' + JSON.stringify(data));
+      return true;
+    } catch (e) {
+      setStatus('bad', '❌ 无法连接 /api/health: ' + e.message + '（请确认 make dev 正在运行，并硬刷新本页 Cmd/Ctrl+Shift+R）');
+      return false;
+    }
+  }
 
   $('healthBtn').addEventListener('click', async () => {
+    show($('health'), 'info', '请求中…');
     try {
-      const r = await fetch('/api/health');
+      const r = await fetch('/api/health', { cache: 'no-store' });
       show($('health'), 'permit', JSON.stringify(await r.json(), null, 2));
     } catch (e) {
       show($('health'), 'err', '请求失败: ' + e.message);
@@ -114,6 +146,9 @@
   });
 
   $('authBtn').addEventListener('click', async () => {
+    const btn = $('authBtn');
+    btn.disabled = true;
+    show($('result'), 'info', '请求中…');
     const body = {
       project: $('project').value,
       user: $('user').value,
@@ -132,6 +167,8 @@
       show($('result'), cls, JSON.stringify(data, null, 2));
     } catch (e) {
       show($('result'), 'err', '请求失败: ' + e.message);
+    } finally {
+      btn.disabled = false;
     }
   });
 
@@ -143,6 +180,9 @@
     $('stage').value = '';
     $('result').style.display = 'none';
   });
+
+  // 页面加载即探测连通性，让用户第一时间知道 fetch 是否能通。
+  pingHealth();
 </script>
 </body>
 </html>
