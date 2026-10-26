@@ -1,0 +1,36 @@
+# ============================================================================
+# knowledge-demo —— admin(kb-auth) + shared(ABAC 引擎) 集成演示
+#
+#   docker compose up -d --build
+#   → http://127.0.0.1:10097/
+#
+# build context = 仓库根（shared/ 与 admin/ 同级）。容器内 admin 用
+#   import "../shared/abac.lume" 引用共享引擎，与宿主目录结构一致。
+#
+# 集中身份卷 kb-auth-shared（rw）：accounts.json / htpasswd / abac-audit.jsonl
+#   本服务独占写；本演示无其他消费方，仅作单服务演示。
+# ============================================================================
+
+name: knowledge-demo
+
+services:
+  kb-auth:
+    build:
+      context: .
+      dockerfile: admin/docker/Dockerfile
+    image: knowledge-demo:latest
+    container_name: kb-auth-demo
+    ports:
+      # 只绑回环：演示用途，无需暴露到局域网
+      - "${HOST_BIND:-127.0.0.1}:${DOCKER_PORT:-10097}:8097"
+    environment:
+      LUME_AUTH_USER: "${LUME_AUTH_USER:-admin}"
+      LUME_AUTH_PASSWORD: "${LUME_AUTH_PASSWORD:-}"
+    volumes:
+      - kb-auth-shared:/app/kb-shared
+    restart: unless-stopped
+
+volumes:
+  kb-auth-shared:
+    name: kb-auth-shared
+    driver: local

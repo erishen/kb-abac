@@ -1,0 +1,25 @@
+// demo-decide.lume —— 第三方消费方样例：直接 import shared 引擎做决策
+//
+// 目的：证明「admin 集中服务」与「任意消费方」用的是同一份 abac 引擎源码。
+//   admin/server.lume 里是 `import "../shared/abac.lume"`，
+//   本脚本（放在 demo/ 下）同样是 `import "../shared/abac.lume"` —— 两份引用指向同一文件。
+//
+// 运行：make demo-decide  （由 Makefile 注入 STATE_DIR=demo/state，含 alice/bob 账号）
+import "../shared/abac.lume" as abac;
+
+// 1) 注入本消费方的资源表（与 admin/data/resources.json 的 "demo" 项目同形）。
+//    各消费方只改这张表，共享同一份 decide() 决策链。
+abac.configure({
+  resources: {
+    data:  { actions: ["read"], min_role: "student" },
+    admin: { actions: ["manage"], min_role: "admin" },
+  },
+  stageResource: "",
+});
+
+print("==> 第三方消费方用 shared 引擎做决策（STATE_DIR 里 alice=admin, bob=student）");
+print("decide(alice, data,  read)   => " + get(abac.decide("alice", "data", "read", ""), "decision"));
+print("decide(alice, admin, manage) => " + get(abac.decide("alice", "admin", "manage", ""), "decision"));
+print("decide(bob,   data,  read)   => " + get(abac.decide("bob",   "data", "read", ""), "decision"));
+print("decide(bob,   admin, manage) => " + get(abac.decide("bob",   "admin", "manage", ""), "decision"));
+print("decide(ghost, data,  read)   => " + get(abac.decide("ghost", "data", "read", ""), "decision"));

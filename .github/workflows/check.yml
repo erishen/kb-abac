@@ -1,0 +1,37 @@
+name: check
+
+# Engine checks for the knowledge-demo bundle.
+# Topology assumption: repo root contains both `shared/` and `admin/` as siblings,
+# because admin/server.lume does `import "../shared/abac.lume"`.
+# This matches the demo layout exactly, so the two `make -C` steps below work as-is.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The engine is .lume source; running its tests needs a bin/lume binary.
+      # erishen/lume is a public repo; check it out into the workspace and build it.
+      - name: Check out erishen/lume (public) for the bin/lume build
+        uses: actions/checkout@v4
+        with:
+          repository: erishen/lume
+          path: _deps/lume
+          submodules: recursive
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libcrypt-dev m4
+
+      - name: Build bin/lume
+        working-directory: _deps/lume
+        run: make -j4
+
+      - name: ABAC engine tests + type-check
+        run: |
+          make -C shared check LUME_DIR="$GITHUB_WORKSPACE/_deps/lume"
+          make -C admin check LUME_DIR="$GITHUB_WORKSPACE/_deps/lume"
