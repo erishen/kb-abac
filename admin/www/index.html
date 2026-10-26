@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>kb-auth · demo</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f7fa; color: #1f2937; line-height: 1.6; padding: 32px 16px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 28px 0 10px; border-left: 4px solid #2563eb; padding-left: 10px; }
+  .sub { color: #6b7280; margin: 0 0 8px; font-size: 14px; }
+  code { background: #eef2ff; color: #3730a3; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+  pre { background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #eef2f7; font-size: 14px; }
+  th { background: #f8fafc; font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .card { background: #fff; border-radius: 10px; padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  label { display: block; font-size: 12px; color: #6b7280; margin: 8px 0 3px; }
+  input, select { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+  button { margin-top: 14px; background: #2563eb; color: #fff; border: none; padding: 9px 18px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  button.sec { background: #6b7280; }
+  button:hover { filter: brightness(1.05); }
+  #result { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; white-space: pre-wrap; display: none; }
+  .permit { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
+  .deny   { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+  .err    { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+  .foot { color: #9ca3af; font-size: 12px; margin-top: 28px; }
+  a { color: #2563eb; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>kb-auth · demo</h1>
+  <p class="sub">集中 ABAC 管理服务（演示版）—— 一个 <code>admin</code> 服务 + 被它 import 的 <code>shared</code> 决策引擎，同源、同决策逻辑。</p>
+
+  <h2>服务状态</h2>
+  <div class="card">
+    <button id="healthBtn">检查 /api/health</button>
+    <div id="health" class="result" style="display:none"></div>
+  </div>
+
+  <h2>API 端点</h2>
+  <table>
+    <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>GET</td><td><code>/api/health</code></td><td>健康检查，返回服务与引擎标识</td></tr>
+      <tr><td>POST</td><td><code>/api/authorize</code></td><td>跨项目授权决策（核心端点）</td></tr>
+      <tr><td>GET</td><td><code>/api/resources</code></td><td>当前生效的资源表（文件优先，缺则兜底）</td></tr>
+    </tbody>
+  </table>
+
+  <h2>试一下 /api/authorize</h2>
+  <div class="card">
+    <div class="grid">
+      <div>
+        <label>project</label>
+        <input id="project" value="demo" />
+      </div>
+      <div>
+        <label>user</label>
+        <input id="user" value="alice" />
+      </div>
+      <div>
+        <label>res（资源）</label>
+        <input id="res" value="data" />
+      </div>
+      <div>
+        <label>action</label>
+        <select id="action">
+          <option value="read" selected>read</option>
+          <option value="manage">manage</option>
+        </select>
+      </div>
+      <div>
+        <label>stage（学段，可空）</label>
+        <input id="stage" value="" placeholder="如 stage-9" />
+      </div>
+    </div>
+    <button id="authBtn">发起决策请求</button>
+    <button id="resetBtn" class="sec">恢复示例</button>
+    <div id="result"></div>
+  </div>
+
+  <p class="foot">
+    本页为演示落地页，不依赖任何外部资源。决策引擎源码见 <code>shared/abac.lume</code>，
+    服务路由见 <code>admin/server.lume</code>。账号与资源均为中性化种子数据。
+  </p>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  function show(el, cls, text) {
+    el.className = 'result ' + cls;
+    el.style.display = 'block';
+    el.textContent = text;
+  }
+
+  $('healthBtn').addEventListener('click', async () => {
+    try {
+      const r = await fetch('/api/health');
+      show($('health'), 'permit', JSON.stringify(await r.json(), null, 2));
+    } catch (e) {
+      show($('health'), 'err', '请求失败: ' + e.message);
+    }
+  });
+
+  $('authBtn').addEventListener('click', async () => {
+    const body = {
+      project: $('project').value,
+      user: $('user').value,
+      res: $('res').value,
+      action: $('action').value,
+      stage: $('stage').value,
+    };
+    try {
+      const r = await fetch('/api/authorize', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      const cls = data.decision === 'PERMIT' ? 'permit' : 'deny';
+      show($('result'), cls, JSON.stringify(data, null, 2));
+    } catch (e) {
+      show($('result'), 'err', '请求失败: ' + e.message);
+    }
+  });
+
+  $('resetBtn').addEventListener('click', () => {
+    $('project').value = 'demo';
+    $('user').value = 'alice';
+    $('res').value = 'data';
+    $('action').value = 'read';
+    $('stage').value = '';
+    $('result').style.display = 'none';
+  });
+</script>
+</body>
+</html>

@@ -33,6 +33,7 @@ RUN mkdir -p /app/kb-shared /app/admin/data /app/auth
 # 布局：server.lume → /app/admin/，shared → /app/shared/
 COPY --chown=10001:10001 admin/server.lume   /app/admin/server.lume
 COPY --chown=10001:10001 admin/data/         /app/admin/data/
+COPY --chown=10001:10001 admin/www/          /app/admin/www/
 COPY --chown=10001:10001 shared/             /app/shared/
 # 本服务 entrypoint：从 /app/kb-shared/accounts.json 生成 htpasswd + 导 HTPASSWD_FILE/STATE_DIR
 COPY --chown=10001:10001 admin/docker/entrypoint.sh /app/entrypoint.sh

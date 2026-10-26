@@ -222,4 +222,20 @@ post "/api/authorize", (req) => {
   };
 };
 
+// 演示落地页：GET / 返回 www/index.html。
+// 说明：本版本 lume 的 docroot 静态 servo 对 ./www 未稳定生效（/index.html 也 404），
+// 故用显式路由读文件返回；body 为字符串时 content-type 默认 text/html（见 LUME.md 响应模型）。
+get "/", (req) => {
+  let html = read_file("www/index.html");
+  if (str(html) == "") {
+    return { status: 404, body: "index.html not found (expected at www/index.html)" };
+  }
+  return { body: html };
+};
+get "/index.html", (req) => {
+  let html = read_file("www/index.html");
+  if (str(html) == "") { return { status: 404, body: "index.html not found" }; }
+  return { body: html };
+};
+
 run();
