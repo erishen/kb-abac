@@ -47,6 +47,13 @@ The decision logic comes from that single shared engine source, not from a copy.
 - `GET /api/resources` — shows the effective registry (JSON vs code fallback).
 - `GET /api/audit` — the DENY log, newest last.
 
+> **`hour` / `weekday` are a demo-only override.** Environment facts must come from
+> a trusted source: if a client can claim `hour=14`, it can walk around a
+> "no admin actions outside business hours" rule. So the override is **off by
+> default**; the endpoint only honours it when `ALLOW_ENV_OVERRIDE=1` is set.
+> This repo's `docker-compose.yml` sets it so the landing-page scenarios can replay
+> a night-time denial — **do not carry that line into a production deployment.**
+
 ### The decision chain (8 steps, short-circuits on first DENY)
 
 ```

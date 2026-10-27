@@ -23,6 +23,11 @@ services:
         LUME_VERSION: ${LUME_VERSION:-v0.11.0}
     image: kb-abac:latest
     container_name: kb-abac
+    environment:
+      # 允许请求体覆盖环境事实（hour / weekday）——**仅用于演示**。
+      # 落地页的两张卡片（办公时间 / 夜间）靠它复现「夜间拒绝」；
+      # 生产部署请删掉这一行（默认为关），否则调用方可自报 hour 绕过时间规则。
+      ALLOW_ENV_OVERRIDE: "1"
     ports:
       # 只绑回环：演示用途，无需暴露到局域网
       - "${HOST_BIND:-127.0.0.1}:${DOCKER_PORT:-10097}:8097"

@@ -182,16 +182,26 @@ post "/api/authorize", (req) => {
   }
   let table = resources_for(project);
   let sres = stage_for(project);
-  let env = current_env();
-  if (get(payload, "hour", null) != null) { put(env, "hour", int(get(payload, "hour", 0))); }
-  if (get(payload, "weekday", null) != null) { put(env, "weekday", int(get(payload, "weekday", 0))); }
-  let d = abac.decide_with(user, res, action, stage, table, sres, env);
+  // 注意变量名不能叫 env：会遮蔽内置函数 env()，之后 env("X") 变成
+  // "trying to call a non-function"（运行期 500，--check 查不出来）。
+  let env_facts_now = current_env();
+  // ⚠️ 客户端可覆盖环境事实 —— 只在演示时开，生产必须关。
+  // 环境属性（第 8 步）的安全性完全依赖「事实由服务端可信产生」。若允许请求体
+  // 自带 hour，调用方传 hour=14 就能绕过「夜间禁止管理操作」这类规则。
+  // 因此默认关闭，只有显式设 ALLOW_ENV_OVERRIDE=1 才接受入参（落地页的场景卡片
+  // 需要它来复现夜间拒绝，compose 里已为该演示站点开启）。
+  let allow_override = str(env("ALLOW_ENV_OVERRIDE")) == "1";
+  if (allow_override) {
+    if (get(payload, "hour", null) != null) { put(env_facts_now, "hour", int(get(payload, "hour", 0))); }
+    if (get(payload, "weekday", null) != null) { put(env_facts_now, "weekday", int(get(payload, "weekday", 0))); }
+  }
+  let d = abac.decide_with(user, res, action, stage, table, sres, env_facts_now);
   return {
     project: project,
     user: user,
     decision: get(d, "decision", ""),
     reason: get(d, "reason", ""),
-    env: env,
+    env: env_facts_now,
   };
 };
 
