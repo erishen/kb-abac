@@ -1,5 +1,17 @@
 # kb-abac — a single-site ABAC demo site
 
+> **Part of a three-repo setup**
+>
+> | Repo | Role |
+> |---|---|
+> | [`kb-auth-shared`](https://github.com/erishen/kb-auth-shared) | The ABAC **decision engine** (a library — no process, no network). Imported by everyone else. |
+> | [`kb-auth`](https://github.com/erishen/kb-auth) | The **central identity authority** — account CRUD, password hashing, `htpasswd`. The only writer. |
+> | [`kb-abac`](https://github.com/erishen/kb-abac) | A **consumer site** — runs the engine in-process and shows how it decides. Start here if you just want to see it work. |
+>
+> How they fit together: sites make authorization decisions **locally** (zero network per
+> request) using the shared engine; only *identity* is centralized. A site reads the engine
+> from `kb-auth-shared`, and optionally read-mounts the `kb-auth` volume to pick up accounts.
+
 A self-contained demo **site** that runs the shared ABAC authorization engine
 in-process:
 

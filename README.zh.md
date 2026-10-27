@@ -1,5 +1,16 @@
 # kb-abac — 单站点 ABAC 演示站点
 
+> **这是一套三仓库组合**
+>
+> | 仓库 | 职责 |
+> |---|---|
+> | [`kb-auth-shared`](https://github.com/erishen/kb-auth-shared) | ABAC **决策引擎**（纯库：无进程、无网络）。被其余两者 import。 |
+> | [`kb-auth`](https://github.com/erishen/kb-auth) | **中央身份权威** —— 账号 CRUD、密码哈希、`htpasswd`。唯一的写入方。 |
+> | [`kb-abac`](https://github.com/erishen/kb-abac) | **消费方站点** —— 在进程内运行引擎，并展示它如何决策。想先看效果从这里开始。 |
+>
+> 三者关系：站点用共享引擎在**本地**完成授权决策（每次请求零网络），只有*身份*是集中的。
+> 站点从 `kb-auth-shared` 取引擎，可选地以只读方式挂载 `kb-auth` 的卷来获取账号。
+
 一个自包含的演示**站点**，在进程内直接运行共享 ABAC 授权引擎：
 
 ```
