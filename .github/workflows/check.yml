@@ -1,37 +1,79 @@
 name: check
 
-# Engine checks for the knowledge-demo bundle.
-# Topology assumption: repo root contains both `shared/` and `admin/` as siblings,
-# because admin/server.lume does `import "../shared/abac.lume"`.
-# This matches the demo layout exactly, so the two `make -C` steps below work as-is.
+# Engine checks for the kb-abac bundle.
+#
+# The lume runtime is taken from the official GitHub Release (prebuilt static
+# binary) instead of being compiled from source here — same artifact the
+# Dockerfile and `make bootstrap` use, so CI exercises exactly what users get.
 
 on:
   push:
   pull_request:
+
+env:
+  LUME_VERSION: v0.11.0
 
 jobs:
   engine:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # The engine is .lume source; running its tests needs a bin/lume binary.
-      # erishen/lume is a public repo; check it out into the workspace and build it.
-      - name: Check out erishen/lume (public) for the bin/lume build
-        uses: actions/checkout@v4
         with:
-          repository: erishen/lume
-          path: _deps/lume
+          # shared/ 是 submodule：不递归拉取的话 make test 会因缺引擎而失败
           submodules: recursive
 
-      - name: Install build deps
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libcrypt-dev m4
-
-      - name: Build bin/lume
-        working-directory: _deps/lume
-        run: make -j4
+      - name: Install lume runtime (official release)
+        run: |
+          set -eu
+          ASSET="lume-linux-x64"
+          BASE="https://github.com/erishen/lume/releases/download/${LUME_VERSION}"
+          mkdir -p "$RUNNER_TEMP/lume"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/lume/a.tar.gz"      "$BASE/$ASSET.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/lume/$ASSET.sha256" "$BASE/$ASSET.sha256"
+          cd "$RUNNER_TEMP/lume" && sha256sum -c "$ASSET.sha256"
+          tar -xzf a.tar.gz
+          sudo install -m755 "$ASSET/bin/lume" /usr/local/bin/lume
+          lume --version
 
       - name: ABAC engine tests + type-check
+        run: make test
+
+  docker:
+    # The Dockerfile must be able to build from a public release only —
+    # this is what an external user gets on `make docker`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build image
+        run: docker build -f docker/Dockerfile -t kb-abac:ci .
+
+      - name: Smoke-test the running service
         run: |
-          make -C shared check LUME_DIR="$GITHUB_WORKSPACE/_deps/lume"
-          make -C admin check LUME_DIR="$GITHUB_WORKSPACE/_deps/lume"
+          set -eu
+          docker run -d --name kd -p 127.0.0.1:18097:8097 kb-abac:ci
+          for i in $(seq 1 30); do
+            if curl -fsS -m 2 http://127.0.0.1:18097/api/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          echo "--- health ---"
+          curl -fsS http://127.0.0.1:18097/api/health
+          echo
+          echo "--- authorize: alice reads own stage (expect PERMIT) ---"
+          out=$(curl -fsS -X POST http://127.0.0.1:18097/api/authorize \
+            -H 'content-type: application/json' \
+            -d '{"project":"demo","user":"alice","res":"stage","action":"read","stage":"stage-1"}')
+          echo "$out"; echo "$out" | grep -q '"decision":"PERMIT"'
+          echo "--- authorize: alice reads other stage (expect DENY) ---"
+          out=$(curl -fsS -X POST http://127.0.0.1:18097/api/authorize \
+            -H 'content-type: application/json' \
+            -d '{"project":"demo","user":"alice","res":"stage","action":"read","stage":"stage-9"}')
+          echo "$out"; echo "$out" | grep -q '"decision":"DENY"'
+          echo "--- authorize: unknown user (expect DENY, fail-closed) ---"
+          out=$(curl -fsS -X POST http://127.0.0.1:18097/api/authorize \
+            -H 'content-type: application/json' \
+            -d '{"project":"demo","user":"ghost","res":"data","action":"read","stage":""}')
+          echo "$out"; echo "$out" | grep -q '"decision":"DENY"'
+          docker rm -f kd

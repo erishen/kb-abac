@@ -1,15 +1,16 @@
 #!/bin/sh
-# demo-authorize.sh —— 演示 kb-auth 的跨项目决策端点 /api/authorize
+# authorize-curl.sh —— 演示站点的授权决策端点 /api/authorize
 #
 # 前置：先 `make docker`（或 `make dev` 起在 8097）。
-# 用 KB_AUTH_BASE 可改目标地址，例如 KB_AUTH_BASE=http://127.0.0.1:8097 sh demo/demo-authorize.sh
+# 用 EXAMPLE_BASE 可改目标地址，例如 EXAMPLE_BASE=http://127.0.0.1:8097 sh examples/authorize-curl.sh
+# （旧名 DEMO_BASE 仍兼容）
 set -e
 
-BASE="${KB_AUTH_BASE:-http://127.0.0.1:10097}"
+BASE="${EXAMPLE_BASE:-${DEMO_BASE:-http://127.0.0.1:10097}}"
 
 echo "==> 探测 $BASE/api/health"
 curl -fsS --noproxy '*' "$BASE/api/health" \
-  || { echo "kb-auth 未运行，请先 make docker（或 make dev）"; exit 1; }
+  || { echo "站点未运行，请先 make docker（或 make dev）"; exit 1; }
 echo
 
 echo "==> POST $BASE/api/authorize  (project=demo)"

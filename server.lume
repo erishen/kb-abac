@@ -1,0 +1,195 @@
+// kb-abac/server.lume —— 单站点 demo
+//
+// 结构（站点与 shared 引擎同源）：
+//   - 本文件是「站点」服务；决策引擎 / JSON 解析全部 import "./shared"。
+//     真实仓库里各站点写的是 `import "../../shared/abac.lume"`（shared 是
+//     monorepo 里与本站点同级的目录）；本 demo 为自包含，把 shared 放在
+//     本项目内，故路径是 "./shared"。
+//   - 授权决策在站点进程本地跑（零网络）：用本站点自己的 data/ 资源表 +
+//     身份表跑 shared/abac.decide_with。站点不做集中账号 CRUD / 审计 /
+//     htpasswd 卷——那些是独立的集中认证服务的职责，本 demo 不打包它。
+//   - 身份与授权的加载规则见 shared/abac.lume 头部：STATE_DIR/accounts.json
+//     （运行时）优先，缺失回退 data/accounts.json（种子）。
+//
+//   make dev      → http://127.0.0.1:8097
+//   make docker   → 宿主 http://127.0.0.1:10097（见 docker-compose.yml DOCKER_PORT）
+//
+import "./shared/abac.lume" as abac;
+
+server {
+  port = 8097;
+  workers = 2;
+  docroot = "./www";
+  htpasswd = env("HTPASSWD_FILE");
+}
+
+// 资源表注册：data/resources.json（改 JSON 即时生效，不用重建镜像）；
+// 下面的表只是「JSON 读不到时」的兜底副本，两段得手工保持同步——兜底生效时
+// 会打日志，且 GET /api/resources 会回 from_file=false，漂移至少是看得见的。
+let FALLBACK_RESOURCES = {
+  demo: {
+    stage: { actions: ["read"], min_role: "student" },
+    data:  { actions: ["read"], min_role: "student" },
+    admin: { actions: ["manage"], min_role: "admin" },
+  },
+};
+// 学段资源名（decide 第 6 步白名单检查）
+let FALLBACK_STAGE = {
+  demo: "stage",
+};
+
+// 读 data/resources.json（读不到 / 解析失败 → null，调用方回落兜底表）。
+func read_registry_file() {
+  let raw = read_file("data/resources.json");
+  if (raw == null) { return null; }
+  let r = try(() => json(raw));
+  if (get(r, "err", null) != null) {
+    print("警告: data/resources.json 解析失败，回落代码内置资源表");
+    return null;
+  }
+  return get(r, "ok", {});
+}
+
+// 某项目的有效资源表。
+func resources_for(project) {
+  let reg = read_registry_file();
+  if (reg == null) { return get(FALLBACK_RESOURCES, project, {}); }
+  let hit = get(get(reg, "projects", {}), project, null);
+  if (hit != null) { return hit; }
+  return get(FALLBACK_RESOURCES, project, {});
+}
+
+// 某项目的学段资源名（空串 = 该项目不按学段判）。
+func stage_for(project) {
+  let reg = read_registry_file();
+  if (reg == null) { return str(get(FALLBACK_STAGE, project, "")); }
+  let hit = get(get(reg, "stage_resource", {}), project, null);
+  if (hit != null) { return str(hit); }
+  return str(get(FALLBACK_STAGE, project, ""));
+}
+
+// 有效视图：把「JSON 优先 + 代码兜底」算出来的结果原样暴露，并逐项标出来源。
+func effective_registry() {
+  let names = {};
+  let reg = read_registry_file();
+  let ks = keys(FALLBACK_RESOURCES);
+  let i = 0;
+  while (i < len(ks)) { put(names, get(ks, i), 1); i = i + 1; }
+  if (reg != null) {
+    let pks = keys(get(reg, "projects", {}));
+    let j = 0;
+    while (j < len(pks)) { put(names, get(pks, j), 1); j = j + 1; }
+  }
+  let out = {};
+  let all = keys(names);
+  let k = 0;
+  while (k < len(all)) {
+    let p = get(all, k);
+    let in_file = reg != null and get(get(reg, "projects", {}), p, null) != null;
+    let in_code = get(FALLBACK_RESOURCES, p, null) != null;
+    let src = "fallback";
+    if (in_file and in_code) { src = "file"; }
+    if (in_file and not in_code) { src = "file-only"; }
+    put(out, p, {
+      resources: resources_for(p),
+      stage_resource: stage_for(p),
+      source: src,
+    });
+    k = k + 1;
+  }
+  return { projects: out, from_file: reg != null };
+}
+
+func parse_body(req) {
+  let body = get(req, "body", "");
+  if (str(body) == "") { return {}; }
+  let r = try(() => json(body));
+  if (get(r, "err", null) != null) { return {}; }
+  return get(r, "ok", {});
+}
+
+get "/api/health", (req) => {
+  return { ok: true, service: "kb-abac", engine: "lume-core", when: now() };
+};
+
+// 资源表（调试：看实际生效的注册表，含每项来自 JSON 还是代码兜底）。
+get "/api/resources", (req) => {
+  return effective_registry();
+};
+
+// 审计（只读）：返回最近的决策记录。
+// 引擎对每个 DENY（及管理写操作）追加一行 JSONL；这里解析成数组给前端渲染。
+// 只读、不分页——演示站点数据量很小；真正的审计查询属于 kb-auth 的职责。
+get "/api/audit", (req) => {
+  let raw = abac.audit_read_all();
+  let events = [];
+  if (raw == null) { return { events: events, total: 0 }; }
+  let lines = split(str(raw), "\n");
+  let i = 0;
+  while (i < len(lines)) {
+    let line = str(get(lines, i, ""));
+    if (line != "") {
+      let r = try(() => json(line));
+      if (get(r, "err", null) == null) { push(events, get(r, "ok", {})); }
+    }
+    i = i + 1;
+  }
+  // 只回最近 100 条，避免页面被长日志拖慢
+  let total = len(events);
+  let start = 0;
+  if (total > 100) { start = total - 100; }
+  let out = [];
+  let j = start;
+  while (j < total) { push(out, get(events, j)); j = j + 1; }
+  return { events: out, total: total };
+};
+
+// 授权决策 API：POST {project, user, res, action, stage}
+// 用本站点资源表 + 身份表跑 decide_with（站点本地决策，零网络）。
+// 认证关闭时 user=null → PERMIT（与本地引擎一致）。
+post "/api/authorize", (req) => {
+  let payload = parse_body(req);
+  let project = str(get(payload, "project", ""));
+  let user = get(payload, "user", null);
+  let res = str(get(payload, "res", ""));
+  let action = str(get(payload, "action", "read"));
+  let stage = str(get(payload, "stage", ""));
+  if (project == "" or res == "") {
+    return { status: 400, body: { err: "缺 project / res 字段" } };
+  }
+  let table = resources_for(project);
+  let sres = stage_for(project);
+  let d = abac.decide_with(user, res, action, stage, table, sres);
+  return {
+    project: project,
+    user: user,
+    decision: get(d, "decision", ""),
+    reason: get(d, "reason", ""),
+  };
+};
+
+// 演示落地页：GET / 返回 www/index.html。
+// 本版本 lume 的 docroot 静态服务对 ./www 未稳定生效（/index.html 也 404），
+// 故用显式路由读文件返回；body 为字符串时 content-type 默认 text/html。
+get "/", (req) => {
+  let html = read_file("www/index.html");
+  if (str(html) == "") {
+    return { status: 404, body: "index.html not found (expected at www/index.html)" };
+  }
+  return { body: html };
+};
+get "/index.html", (req) => {
+  let html = read_file("www/index.html");
+  if (str(html) == "") { return { status: 404, body: "index.html not found" }; }
+  return { body: html };
+};
+// 外部脚本：lume httpd 默认 CSP 是 `script-src 'self'`，会拦截内联 <script>，
+// 故落地页的 JS 抽到 www/app.js，用同源外部脚本加载（'self' 允许）。必须显式
+// type=text/javascript，否则浏览器按 text/html 解析外部脚本会拒绝执行。
+get "/app.js", (req) => {
+  let js = read_file("www/app.js");
+  if (str(js) == "") { return { status: 404, body: "app.js not found" }; }
+  return { type: "text/javascript", body: js };
+};
+
+run();

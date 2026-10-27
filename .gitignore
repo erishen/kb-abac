@@ -1,9 +1,12 @@
 # ===== 运行时私有状态（切勿提交）=====
 .env
 logs/
-demo/state/
+examples/state/
+state/
 admin/state/
-shared/state/
+
+# make bootstrap 下载的 lume 运行时（可重建，不入库）
+.tools/
 
 # ===== 系统 / 编辑器 =====
 .DS_Store
