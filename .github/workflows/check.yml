@@ -5,6 +5,12 @@ name: check
 # The lume runtime is taken from the official GitHub Release (prebuilt static
 # binary) instead of being compiled from source here — same artifact the
 # Dockerfile and `make bootstrap` use, so CI exercises exactly what users get.
+#
+# 两层验证，缺一不可：
+#   engine  —— make test：130 条断言，覆盖决策链每一步与四套环境
+#   docker  —— 真构建、真起容器、真打接口。`lume --check` 只做语法/类型检查，
+#              抓不到运行期错误（参数个数不匹配、变量遮蔽内置函数等都曾漏过），
+#              所以必须有冒烟测试兜住「镜像能不能起来、端点能不能答」。
 
 on:
   push:
@@ -54,26 +60,70 @@ jobs:
         run: |
           set -eu
           docker run -d --name kd -p 127.0.0.1:18097:8097 kb-abac:ci
+          # 等待就绪：健康检查通过再继续，避免竞态导致的假失败
           for i in $(seq 1 30); do
             if curl -fsS -m 2 http://127.0.0.1:18097/api/health >/dev/null 2>&1; then break; fi
             sleep 1
           done
-          echo "--- health ---"
-          curl -fsS http://127.0.0.1:18097/api/health
-          echo
-          echo "--- authorize: alice reads own stage (expect PERMIT) ---"
-          out=$(curl -fsS -X POST http://127.0.0.1:18097/api/authorize \
-            -H 'content-type: application/json' \
-            -d '{"project":"demo","user":"alice","res":"stage","action":"read","stage":"stage-1"}')
-          echo "$out"; echo "$out" | grep -q '"decision":"PERMIT"'
-          echo "--- authorize: alice reads other stage (expect DENY) ---"
-          out=$(curl -fsS -X POST http://127.0.0.1:18097/api/authorize \
-            -H 'content-type: application/json' \
-            -d '{"project":"demo","user":"alice","res":"stage","action":"read","stage":"stage-9"}')
-          echo "$out"; echo "$out" | grep -q '"decision":"DENY"'
-          echo "--- authorize: unknown user (expect DENY, fail-closed) ---"
-          out=$(curl -fsS -X POST http://127.0.0.1:18097/api/authorize \
-            -H 'content-type: application/json' \
-            -d '{"project":"demo","user":"ghost","res":"data","action":"read","stage":""}')
-          echo "$out"; echo "$out" | grep -q '"decision":"DENY"'
+
+          # 断言辅助：POST 一次决策，校验 decision 字段。
+          # $1=label $2=json $3=期望的 decision
+          post() {
+            out=$(curl -fsS -m 5 -X POST http://127.0.0.1:18097/api/authorize \
+              -H 'content-type: application/json' -d "$2")
+            printf '%s\n' "--- $1 ---" "$out"
+            printf '%s' "$out" | grep -q "\"decision\":\"$3\""
+          }
+
+          echo "=== health ==="
+          curl -fsS http://127.0.0.1:18097/api/health; echo
+
+          echo "=== 资源注册表来自文件（不是兜底副本）==="
+          reg=$(curl -fsS http://127.0.0.1:18097/api/resources)
+          printf '%s\n' "$reg"
+          printf '%s' "$reg" | grep -q '"from_file":true'
+
+          echo "=== 决策链各分支 ==="
+          # ① 放行路径
+          post "alice 读自己学段（期望 PERMIT）" \
+            '{"project":"project-a","user":"alice","res":"stage","action":"read","stage":"stage-1"}' PERMIT
+          # ② 学段白名单（第 6 步）
+          post "alice 读他人学段（期望 DENY）" \
+            '{"project":"project-a","user":"alice","res":"stage","action":"read","stage":"stage-9"}' DENY
+          # ③ 角色门槛（第 5 步）
+          post "alice 调管理接口（期望 DENY）" \
+            '{"project":"project-a","user":"alice","res":"admin","action":"manage","stage":""}' DENY
+          # ④ 未登记账号 fail-closed（第 4 步）
+          post "未知账号（期望 DENY）" \
+            '{"project":"project-a","user":"ghost","res":"data","action":"read","stage":""}' DENY
+          # ⑤ 资源未知（第 2 步）—— 同时验证旧项目名 demo 已不存在
+          post "未登记项目（期望 DENY）" \
+            '{"project":"demo","user":"alice","res":"stage","action":"read","stage":"stage-1"}' DENY
+          # ⑥ 跨属性比较（第 7 步）：admin grade 12 ≥ level 8 → 放行
+          post "高 grade 读密级报告（期望 PERMIT）" \
+            '{"project":"project-a","user":"admin","res":"report","action":"read","stage":""}' PERMIT
+          # ⑦ 跨属性比较被拒：alice grade 6 < level 8
+          post "低 grade 读密级报告（期望 DENY）" \
+            '{"project":"project-a","user":"alice","res":"report","action":"read","stage":""}' DENY
+          # ⑧ 环境属性（第 8 步）：compose 已开 ALLOW_ENV_OVERRIDE，可指定小时
+          post "管理员夜间操作（期望 DENY）" \
+            '{"project":"project-a","user":"admin","res":"admin","action":"manage","stage":"","hour":22}' DENY
+          post "管理员办公时间操作（期望 PERMIT）" \
+            '{"project":"project-a","user":"admin","res":"admin","action":"manage","stage":"","hour":14}' PERMIT
+
+          echo "=== 审计：DENY 必须留痕 ==="
+          audit=$(curl -fsS http://127.0.0.1:18097/api/audit)
+          printf '%s\n' "$audit" | head -c 300; echo
+          printf '%s' "$audit" | grep -q '"total":[1-9]'
+
+          echo "=== 落地页与静态资源 ==="
+          curl -fsS -o /dev/null -w 'GET /        %{http_code}\n' http://127.0.0.1:18097/
+          curl -fsS -o /dev/null -w 'GET /app.js  %{http_code}\n' http://127.0.0.1:18097/app.js
+          curl -fsS -o /dev/null -w 'GET /favicon.svg %{http_code}\n' http://127.0.0.1:18097/favicon.svg
+
           docker rm -f kd
+          echo "=== 冒烟测试全部通过 ==="
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker logs kd 2>&1 | tail -50 || true
