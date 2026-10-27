@@ -58,6 +58,7 @@ RUN set -eu; \
     sha256sum -c "${ASSET}.sha256"; \
     tar -xzf "${ASSET}.tar.gz"; \
     install -m 0755 "${ASSET}/bin/lume" /out/lume; \
+    : > /out/state.keep; \
     /out/lume --version
 
 # ---- 阶段 2：最终镜像 ----------------------------------------------------
@@ -79,6 +80,14 @@ COPY --chown=10001:10001 server.lume /app/server.lume
 COPY --chown=10001:10001 data/       /app/data/
 COPY --chown=10001:10001 www/        /app/www/
 COPY --chown=10001:10001 shared/     /app/shared/
+
+# 运行时可写层（STATE_DIR 默认 state，相对 WORKDIR /app）：
+# 引擎对每个 DENY 会往 state/abac-audit.jsonl 追加一行。scratch 镜像里这个
+# 目录不会自动存在，而 audit_write() 的 mkdir 失败是被 try() 吞掉的（注释写
+# 「已存在」），随后写文件又失败——审计静默丢失，不报错。所以必须显式建好，
+# 否则「每次拒绝都留痕」这条在容器里名存实亡。
+# 属主必须是 10001：USER 已切到它，非属主写不进去。
+COPY --chown=10001:10001 --from=lume-fetch /out/state.keep /app/state/.keep
 
 # 原本由 docker/entrypoint.sh 做的事：导出一个环境变量后 exec。
 # scratch 里没有 /bin/sh，跑不了 shell 脚本；ENV 直接等价实现，

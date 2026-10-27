@@ -192,4 +192,19 @@ get "/app.js", (req) => {
   return { type: "text/javascript", body: js };
 };
 
+// favicon：浏览器会自动请求 /favicon.ico，不提供就会在 console 留一条 404。
+// 内联一个极小的 SVG（盾形 = 授权决策），省一次往返，也避免公开演示时页面上
+// 挂着一个红叉。480 字节，不值得单独放文件。
+let FAVICON_SVG = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+  + "<rect width='32' height='32' rx='7' fill='#2f5fe0'/>"
+  + "<path d='M16 6l8 3v6c0 5-3.4 9.2-8 11-4.6-1.8-8-6-8-11V9z' fill='none' stroke='#fff' stroke-width='2.2' stroke-linejoin='round'/>"
+  + "<path d='M12.2 16.2l2.6 2.6 5-5.2' fill='none' stroke='#fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/>"
+  + "</svg>";
+get "/favicon.ico", (req) => {
+  return { type: "image/svg+xml", body: FAVICON_SVG };
+};
+get "/favicon.svg", (req) => {
+  return { type: "image/svg+xml", body: FAVICON_SVG };
+};
+
 run();
