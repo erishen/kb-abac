@@ -17,12 +17,24 @@
         "actions": [
           "manage"
         ],
-        "min_role": "admin"
+        "min_role": "admin",
+        "env": {
+          "deny_when": [
+            {
+              "fact": "hour",
+              "not_in": [
+                9,
+                18
+              ],
+              "reason": "no-admin-actions-outside-business-hours"
+            }
+          ]
+        }
       }
     }
   },
   "stage_resource": {
     "demo": "stage"
   },
-  "comment": "演示用资源表：资源 -> 允许动作 + 最低角色。引擎按 (user, res, action, stage) 用账号角色与学段授权做决策。stage_resource 指定哪个资源需要走学段白名单检查。改完即时生效，不用重建镜像。"
+  "comment": "演示用资源表：资源 -> 允许动作 + 最低角色 + 可选 env 规则。引擎按 (user, res, action, stage, env) 决策：role 门槛、学段白名单，以及 env 段声明的运行期事实（这里 admin 资源禁止 9-18 点之外的管理操作）。stage_resource 指定哪个资源走学段白名单检查。改完即时生效，不用重建镜像。"
 }

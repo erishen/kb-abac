@@ -25,6 +25,8 @@ const SCENARIOS = [
   { id: 'unknown-user', title: '未登记的账号',     desc: 'ghost（fail-closed）',   body: { project: 'demo', user: 'ghost', res: 'data',  action: 'read',   stage: '' } },
   { id: 'bad-action',   title: '资源不支持的动作', desc: 'alice · data manage',    body: { project: 'demo', user: 'alice', res: 'data',  action: 'manage', stage: '' } },
   { id: 'auth-off',     title: '认证关闭（未登录）', desc: 'user = null',          body: { project: 'demo', user: null,    res: 'admin', action: 'manage', stage: '' } },
+  { id: 'env-day',      title: '管理员在办公时间操作', desc: 'admin · 14:00',      body: { project: 'demo', user: 'admin', res: 'admin', action: 'manage', stage: '', hour: 14 } },
+  { id: 'env-night',    title: '管理员在夜间操作',     desc: 'admin · 22:00',      body: { project: 'demo', user: 'admin', res: 'admin', action: 'manage', stage: '', hour: 22 } },
 ];
 
 // ---------------------------------------------------------------------------
@@ -62,6 +64,12 @@ const STEPS = [
     label: '学段在授权白名单内',
     failTest: (r) => /\[no local stage grant|\[stage '[^']*' not in whitelist\]/.test(r),
   },
+  {
+    // 第 7 步：环境属性。资源表里声明的 env.deny_when 规则，用运行期事实判定。
+    key: 'env',
+    label: '环境属性满足规则',
+    failTest: (r) => /\[env\.\w+=[^\]]* violates/.test(r),
+  },
 ];
 
 // 从 reason 里取方括号片段，用作每步的「证据」
@@ -78,6 +86,7 @@ const STEP_PATTERNS = {
   subject: /\[subject /,
   role:    /\[role '/,
   stage:   /\[no local stage grant|\[stage '/,
+  env:     /\[env\.\w+=|\[env ok:/,
 };
 function evidenceFor(stepKey, frags) {
   const re = STEP_PATTERNS[stepKey];
@@ -216,6 +225,14 @@ async function runScenario(sc) {
     $('req').textContent =
       `user=${body.user === null ? 'null' : body.user} · res=${body.res} · action=${body.action}` +
       (body.stage ? ` · stage=${body.stage}` : '');
+    // 把本次使用的环境事实显示出来，让「第 7 步看的是什么」一目了然
+    if (data.env) {
+      $('envInfo').textContent =
+        `环境事实：hour=${data.env.hour} · weekday=${data.env.weekday}`;
+      $('envInfo').style.display = 'block';
+    } else {
+      $('envInfo').style.display = 'none';
+    }
     $('raw').textContent = JSON.stringify(data, null, 2);
 
     if (decision === 'ERROR') {

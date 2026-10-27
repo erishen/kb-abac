@@ -10,6 +10,9 @@
 >
 > 三者关系：站点用共享引擎在**本地**完成授权决策（每次请求零网络），只有*身份*是集中的。
 > 站点从 `kb-auth-shared` 取引擎，可选地以只读方式挂载 `kb-auth` 的卷来获取账号。
+>
+> 想了解为什么做成库而不是「网关 + 独立 PDP」？见
+> [`docs/DESIGN-TRADEOFF.md`](docs/DESIGN-TRADEOFF.md)。
 
 一个自包含的演示**站点**，在进程内直接运行共享 ABAC 授权引擎：
 
@@ -33,11 +36,44 @@ examples/          # 第三方消费方样例 + curl 脚本
 
 ## 站点做什么
 
-- `POST /api/authorize` — `{project, user, res, action, stage}` → `PERMIT`/`DENY`，
+- `POST /api/authorize` — `{project, user, res, action, stage, hour?}` → `PERMIT`/`DENY`，
   由 `shared/abac.decide_with` 在站点进程内决策，查本站点的资源表
   （`data/resources.json`）与身份表（`data/accounts.json`）。
+  响应里带完整决策 trace 和本次使用的环境事实。
 - 未登记账号、读不到表 → 一律 **fail-closed（拒绝）**。
 - `GET /api/resources` — 查看实际生效的资源注册表（JSON 优先 / 代码兜底）。
+- `GET /api/audit` — 拒绝日志，最新在后。
+
+### 决策链（七步，任一 DENY 即短路）
+
+```
+1 认证    认证是否开启？         （关闭 → 直接 PERMIT，到此为止）
+2 资源    资源类型是否已知？      （注册表）
+3 动作    该资源是否允许此动作？  （注册表 `actions`）
+4 账号    账号表可读、账号已登记？（fail-closed）
+5 角色    角色是否 ≥ 资源最低要求？（注册表）
+6 学段    学段是否在授权白名单？  （账号表 `stages`）
+7 环境    环境规则是否满足？      （注册表 `env.deny_when`）
+```
+
+第 7 步是它不止于 RBAC 的地方：规则写在资源表里，用运行期事实求值。
+例如「办公时间之外禁止管理操作」：
+
+```json
+"admin": {
+  "actions": ["manage"], "min_role": "admin",
+  "env": { "deny_when": [ { "fact": "hour", "not_in": [9, 18],
+                            "reason": "no-admin-actions-outside-business-hours" } ] }
+}
+```
+
+拒绝时会写明触发的事实：
+`[env.hour=22 violates 'no-admin-actions-outside-business-hours']`。
+
+> **边界（如实说明）。** 这是个刻意做小的引擎：角色门槛、学段白名单，加上少数
+> 几个环境原语（`hour`、`weekday`、`not_in` / `eq` / `ne`）。它**没有**通用表达式
+> 语言、**没有** REVIEW 三态、**没有**行级过滤。能做什么、不能做什么、什么时候
+> 该换成「网关 + 独立 PDP」，见 [`docs/DESIGN-TRADEOFF.md`](docs/DESIGN-TRADEOFF.md)。
 
 ## 前置：lume 运行时
 

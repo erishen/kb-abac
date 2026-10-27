@@ -144,9 +144,21 @@ get "/api/audit", (req) => {
   return { events: out, total: total };
 };
 
-// 授权决策 API：POST {project, user, res, action, stage}
+// 当前环境事实（第 7 步用）。显式算好再传给引擎，而不是让引擎自己猜时区：
+// 服务器时区由容器 TZ 决定，引擎只接收结论，便于测试与复现。
+// lume 的 '/' 恒为 float，取模前必须 int(整个除法结果)。
+func current_env() {
+  let t = int(now());
+  return {
+    hour: int(t / 3600) % 24,
+    weekday: (int(t / 86400) + 4) % 7,
+  };
+}
+
+// 授权决策 API：POST {project, user, res, action, stage, hour?}
 // 用本站点资源表 + 身份表跑 decide_with（站点本地决策，零网络）。
 // 认证关闭时 user=null → PERMIT（与本地引擎一致）。
+// hour / weekday 可选传入，覆盖服务端当前时间——演示页用它来复现「夜间拒绝」。
 post "/api/authorize", (req) => {
   let payload = parse_body(req);
   let project = str(get(payload, "project", ""));
@@ -159,12 +171,16 @@ post "/api/authorize", (req) => {
   }
   let table = resources_for(project);
   let sres = stage_for(project);
-  let d = abac.decide_with(user, res, action, stage, table, sres);
+  let env = current_env();
+  if (get(payload, "hour", null) != null) { put(env, "hour", int(get(payload, "hour", 0))); }
+  if (get(payload, "weekday", null) != null) { put(env, "weekday", int(get(payload, "weekday", 0))); }
+  let d = abac.decide_with(user, res, action, stage, table, sres, env);
   return {
     project: project,
     user: user,
     decision: get(d, "decision", ""),
     reason: get(d, "reason", ""),
+    env: env,
   };
 };
 

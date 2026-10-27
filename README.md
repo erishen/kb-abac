@@ -11,6 +11,9 @@
 > How they fit together: sites make authorization decisions **locally** (zero network per
 > request) using the shared engine; only *identity* is centralized. A site reads the engine
 > from `kb-auth-shared`, and optionally read-mounts the `kb-auth` volume to pick up accounts.
+>
+> Curious why this is a library rather than a gateway + PDP? See
+> [`docs/DESIGN-TRADEOFF.md`](docs/DESIGN-TRADEOFF.md).
 
 A self-contained demo **site** that runs the shared ABAC authorization engine
 in-process:
@@ -36,11 +39,46 @@ The decision logic comes from that single shared engine source, not from a copy.
 
 ## What the site does
 
-- `POST /api/authorize` — `{project, user, res, action, stage}` → `PERMIT`/`DENY`,
+- `POST /api/authorize` — `{project, user, res, action, stage, hour?}` → `PERMIT`/`DENY`,
   decided in-process by `shared/abac.decide_with` against this site's resource
   table (`data/resources.json`) and identity table (`data/accounts.json`).
+  The response includes the full decision trace and the environment facts used.
 - Unknown accounts and unreadable tables fail **closed** (DENY).
 - `GET /api/resources` — shows the effective registry (JSON vs code fallback).
+- `GET /api/audit` — the DENY log, newest last.
+
+### The decision chain (7 steps, short-circuits on first DENY)
+
+```
+1 auth        authentication enabled?          (off → PERMIT, stops here)
+2 resource    resource type known?             (registry)
+3 action      action allowed on that resource? (registry `actions`)
+4 subject     account readable + registered?   (fail-closed)
+5 role        role ≥ resource `min_role`?      (registry)
+6 stage       stage in the granted whitelist?  (accounts `stages`)
+7 env         environment rules satisfied?     (registry `env.deny_when`)
+```
+
+Step 7 is what makes this more than RBAC: rules live in the resource table and are
+evaluated against runtime facts. Example — no admin actions outside business hours:
+
+```json
+"admin": {
+  "actions": ["manage"], "min_role": "admin",
+  "env": { "deny_when": [ { "fact": "hour", "not_in": [9, 18],
+                            "reason": "no-admin-actions-outside-business-hours" } ] }
+}
+```
+
+Denials name the fact that fired:
+`[env.hour=22 violates 'no-admin-actions-outside-business-hours']`.
+
+> **Scope, stated honestly.** This is a deliberately small engine: role thresholds,
+> a stage whitelist, and a handful of environment primitives (`hour`, `weekday`,
+> `not_in` / `eq` / `ne`). It has **no** general expression language, **no** REVIEW
+> state, and **no** row-level filtering. See
+> [`docs/DESIGN-TRADEOFF.md`](docs/DESIGN-TRADEOFF.md) for what it can and cannot
+> do, and when you should reach for a gateway + standalone PDP instead.
 
 ## Requirements: the lume runtime
 
