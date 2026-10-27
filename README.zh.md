@@ -44,7 +44,7 @@ examples/          # 第三方消费方样例 + curl 脚本
 - `GET /api/resources` — 查看实际生效的资源注册表（JSON 优先 / 代码兜底）。
 - `GET /api/audit` — 拒绝日志，最新在后。
 
-### 决策链（七步，任一 DENY 即短路）
+### 决策链（八步，任一 DENY 即短路）
 
 ```
 1 认证    认证是否开启？         （关闭 → 直接 PERMIT，到此为止）
@@ -53,10 +53,27 @@ examples/          # 第三方消费方样例 + curl 脚本
 4 账号    账号表可读、账号已登记？（fail-closed）
 5 角色    角色是否 ≥ 资源最低要求？（注册表）
 6 学段    学段是否在授权白名单？  （账号表 `stages`）
-7 环境    环境规则是否满足？      （注册表 `env.deny_when`）
+7 跨属性  主体属性 vs 资源属性？  （注册表 `require`）
+8 环境    环境规则是否满足？      （注册表 `env.deny_when`）
 ```
 
-第 7 步是它不止于 RBAC 的地方：规则写在资源表里，用运行期事实求值。
+第 7 步做的是**两个属性之间的比较**，这是单向角色门槛表达不了的。
+例如一份密级为 `level: 8` 的报告，只允许 `grade` 达到它的账号阅读：
+
+```json
+"report": {
+  "actions": ["read"], "min_role": "student", "level": 8,
+  "require": [ { "subject": "grade", "gte": "resource.level",
+                 "reason": "account-grade-below-report-level" } ]
+}
+```
+
+操作数写法：`subject.<属性>` / `resource.<属性>` / `literal:<值>`
+（裸名先按主体属性解析，取不到再试资源表）。支持 `gte` `gt` `lte` `lt` `eq` `ne`。
+被拒时两侧实际值都会写出来：
+`[require grade gte resource.level failed (got 6 vs 8) 'account-grade-below-report-level']`
+
+第 8 步加上环境维度：规则写在资源表里，用运行期事实求值。
 例如「办公时间之外禁止管理操作」：
 
 ```json
@@ -70,9 +87,10 @@ examples/          # 第三方消费方样例 + curl 脚本
 拒绝时会写明触发的事实：
 `[env.hour=22 violates 'no-admin-actions-outside-business-hours']`。
 
-> **边界（如实说明）。** 这是个刻意做小的引擎：角色门槛、学段白名单，加上少数
-> 几个环境原语（`hour`、`weekday`、`not_in` / `eq` / `ne`）。它**没有**通用表达式
-> 语言、**没有** REVIEW 三态、**没有**行级过滤。能做什么、不能做什么、什么时候
+> **边界（如实说明）。** 这是个刻意做小的引擎：角色门槛、学段白名单、受限的
+> 属性比较（`require`），加上少数几个环境原语（`hour`、`weekday`、
+> `not_in` / `eq` / `ne`）。它**没有**通用表达式语言、**没有** REVIEW 三态、
+> **没有**行级过滤。能做什么、不能做什么、什么时候
 > 该换成「网关 + 独立 PDP」，见 [`docs/DESIGN-TRADEOFF.md`](docs/DESIGN-TRADEOFF.md)。
 
 ## 前置：lume 运行时
@@ -125,8 +143,8 @@ make docker-stop
 ```sh
 curl -X POST http://127.0.0.1:8097/api/authorize \
   -H 'content-type: application/json' \
-  -d '{"project":"demo","user":"alice","res":"data","action":"read","stage":""}'
-# → {"project":"demo","user":"alice","decision":"PERMIT", ...}
+  -d '{"project":"project-a","user":"alice","res":"data","action":"read","stage":""}'
+# → {"project":"project-a","user":"alice","decision":"PERMIT", ...}
 ```
 
 ## 配置

@@ -19,14 +19,16 @@ const $ = (id) => document.getElementById(id);
 // 场景：刻意覆盖五条不同的拒绝路径 + 一条放行路径
 // ---------------------------------------------------------------------------
 const SCENARIOS = [
-  { id: 'own-stage',    title: '学生读自己学段',   desc: 'alice · stage-1',        body: { project: 'demo', user: 'alice', res: 'stage', action: 'read',   stage: 'stage-1' } },
-  { id: 'other-stage',  title: '学生读他人学段',   desc: 'alice · stage-9',        body: { project: 'demo', user: 'alice', res: 'stage', action: 'read',   stage: 'stage-9' } },
-  { id: 'role-gate',    title: '学生调管理接口',   desc: 'alice · admin manage',   body: { project: 'demo', user: 'alice', res: 'admin', action: 'manage', stage: '' } },
-  { id: 'unknown-user', title: '未登记的账号',     desc: 'ghost（fail-closed）',   body: { project: 'demo', user: 'ghost', res: 'data',  action: 'read',   stage: '' } },
-  { id: 'bad-action',   title: '资源不支持的动作', desc: 'alice · data manage',    body: { project: 'demo', user: 'alice', res: 'data',  action: 'manage', stage: '' } },
-  { id: 'auth-off',     title: '认证关闭（未登录）', desc: 'user = null',          body: { project: 'demo', user: null,    res: 'admin', action: 'manage', stage: '' } },
-  { id: 'env-day',      title: '管理员在办公时间操作', desc: 'admin · 14:00',      body: { project: 'demo', user: 'admin', res: 'admin', action: 'manage', stage: '', hour: 14 } },
-  { id: 'env-night',    title: '管理员在夜间操作',     desc: 'admin · 22:00',      body: { project: 'demo', user: 'admin', res: 'admin', action: 'manage', stage: '', hour: 22 } },
+  { id: 'own-stage',    title: '学生读自己学段',   desc: 'alice · stage-1',        body: { project: 'project-a', user: 'alice', res: 'stage', action: 'read',   stage: 'stage-1' } },
+  { id: 'other-stage',  title: '学生读他人学段',   desc: 'alice · stage-9',        body: { project: 'project-a', user: 'alice', res: 'stage', action: 'read',   stage: 'stage-9' } },
+  { id: 'role-gate',    title: '学生调管理接口',   desc: 'alice · admin manage',   body: { project: 'project-a', user: 'alice', res: 'admin', action: 'manage', stage: '' } },
+  { id: 'unknown-user', title: '未登记的账号',     desc: 'ghost（fail-closed）',   body: { project: 'project-a', user: 'ghost', res: 'data',  action: 'read',   stage: '' } },
+  { id: 'bad-action',   title: '资源不支持的动作', desc: 'alice · data manage',    body: { project: 'project-a', user: 'alice', res: 'data',  action: 'manage', stage: '' } },
+  { id: 'auth-off',     title: '认证关闭（未登录）', desc: 'user = null',          body: { project: 'project-a', user: null,    res: 'admin', action: 'manage', stage: '' } },
+  { id: 'env-day',      title: '管理员在办公时间操作', desc: 'admin · 14:00',      body: { project: 'project-a', user: 'admin', res: 'admin', action: 'manage', stage: '', hour: 14 } },
+  { id: 'env-night',    title: '管理员在夜间操作',     desc: 'admin · 22:00',      body: { project: 'project-a', user: 'admin', res: 'admin', action: 'manage', stage: '', hour: 22 } },
+  { id: 'attr-pass',    title: '高年级读密级报告',     desc: 'admin grade 12 ≥ 8', body: { project: 'project-a', user: 'admin', res: 'report', action: 'read', stage: '' } },
+  { id: 'attr-deny',    title: '低年级读密级报告',     desc: 'alice grade 6 < 8',  body: { project: 'project-a', user: 'alice', res: 'report', action: 'read', stage: '' } },
 ];
 
 // ---------------------------------------------------------------------------
@@ -65,6 +67,12 @@ const STEPS = [
     failTest: (r) => /\[no local stage grant|\[stage '[^']*' not in whitelist\]/.test(r),
   },
   {
+    // 跨属性比较：资源表 require 段，比较主体属性与资源属性。
+    key: 'require',
+    label: '跨属性要求（主体 vs 资源）',
+    failTest: (r) => /\[require [^\]]*failed/.test(r),
+  },
+  {
     // 第 7 步：环境属性。资源表里声明的 env.deny_when 规则，用运行期事实判定。
     key: 'env',
     label: '环境属性满足规则',
@@ -86,6 +94,7 @@ const STEP_PATTERNS = {
   subject: /\[subject /,
   role:    /\[role '/,
   stage:   /\[no local stage grant|\[stage '/,
+  require: /\[require /,
   env:     /\[env\.\w+=|\[env ok:/,
 };
 function evidenceFor(stepKey, frags) {

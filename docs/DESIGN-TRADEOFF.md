@@ -39,7 +39,7 @@
 
 ## 2. 本项目的决策链
 
-`shared/abac.lume` 的 `decide_with()` 是 **deny-by-default** 的七步短路链：
+`shared/abac.lume` 的 `decide_with()` 是 **deny-by-default** 的八步短路链：
 
 | # | 检查 | 失败结果 | 可配置 |
 |---|---|---|---|
@@ -49,9 +49,29 @@
 | 4 | 账号属性是否可读、账号是否已登记 | DENY（fail-closed） | 账号表 |
 | 5 | 角色等级是否达到资源最低要求 | DENY | 资源表 `min_role` |
 | 6 | 学段是否在授权白名单内 | DENY | 账号表 `stages` + 资源表 `stage_resource` |
-| 7 | 环境属性是否满足规则 | DENY | 资源表 `env.deny_when` |
+| 7 | 跨属性比较（主体 vs 资源） | DENY | 资源表 `require` |
+| 8 | 环境属性是否满足规则 | DENY | 资源表 `env.deny_when` |
 
 任一步 DENY 即短路返回，**并写一条审计**。
+
+### 第 7 步：跨属性比较
+
+第 5 步只能做单向门槛（`role >= min_role`）。第 7 步比较两个属性：
+
+```json
+"report": {
+  "actions": ["read"], "min_role": "student", "level": 8,
+  "require": [ { "subject": "grade", "gte": "resource.level",
+                 "reason": "account-grade-below-report-level" } ]
+}
+```
+
+操作数：`subject.<attr>` / `resource.<attr>` / `literal:<value>`；裸名先按主体
+属性解析，取不到再试资源表。操作符：`gte` `gt` `lte` `lt` `eq` `ne`。
+失败时两侧实际值写进 reason：`... failed (got 6 vs 8) '...'`。
+
+**为什么排在环境之前**：它比较的是主体与资源属性，与时钟无关。先判完这些，
+环境拒绝才有清晰归因——否则用户看到「夜间禁止」却不知道其实 grade 也不够。
 
 ### 第 7 步：环境属性
 
@@ -93,7 +113,8 @@
 
 | 能力 | 说明 |
 |---|---|
-| 主体属性 | `role`、`stages`、`grade`、`title` |
+| 主体属性 | `role`、`stages`、`grade`、`title`，以及账号记录上的任意自定义字段 |
+| 跨属性比较 | `subject.X op resource.Y`，支持 6 种比较符 |
 | 资源属性 | 资源类型、允许动作、最低角色（资源表声明） |
 | 环境属性 | `hour`、`weekday`（可扩展） |
 | 两层身份模型 | 中央定 `role`，本地定 `stages`，适合多站点共用一套身份 |
@@ -105,7 +126,7 @@
 
 | 限制 | 影响 | 替代方案 |
 |---|---|---|
-| **无策略表达式引擎** | 不能写 `subject.clearance < resource.requiredClearance` 这类跨属性比较 | 需要任意表达式时用 OPA / SpEL |
+| **比较能力有限** | 支持 `subject.X op resource.Y` 的 6 种比较符，但不支持 `A + B > C` 这类算术组合、多条件 AND/OR 嵌套 | 需要任意表达式时用 OPA / SpEL |
 | **无 REVIEW 三态** | 只有 PERMIT / DENY，不能转人工审批 | 金融、风控场景需要独立 PDP |
 | **无行级过滤** | 只能判「能否访问**这个**资源」，不能过滤列表 | 需要列表级过滤时在业务层二次调用 |
 | **无策略优先级** | 七步顺序固定，不能按优先级合并多条策略 | 规则冲突多的场景需要 deny-override 机制 |

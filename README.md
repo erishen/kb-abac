@@ -47,7 +47,7 @@ The decision logic comes from that single shared engine source, not from a copy.
 - `GET /api/resources` — shows the effective registry (JSON vs code fallback).
 - `GET /api/audit` — the DENY log, newest last.
 
-### The decision chain (7 steps, short-circuits on first DENY)
+### The decision chain (8 steps, short-circuits on first DENY)
 
 ```
 1 auth        authentication enabled?          (off → PERMIT, stops here)
@@ -56,10 +56,28 @@ The decision logic comes from that single shared engine source, not from a copy.
 4 subject     account readable + registered?   (fail-closed)
 5 role        role ≥ resource `min_role`?      (registry)
 6 stage       stage in the granted whitelist?  (accounts `stages`)
-7 env         environment rules satisfied?     (registry `env.deny_when`)
+7 require     subject attribute vs resource?   (registry `require`)
+8 env         environment rules satisfied?     (registry `env.deny_when`)
 ```
 
-Step 7 is what makes this more than RBAC: rules live in the resource table and are
+Step 7 compares **two attributes** — something a one-way role threshold cannot
+express. Example: a report with classification `level: 8` is readable only by
+accounts whose `grade` reaches it:
+
+```json
+"report": {
+  "actions": ["read"], "min_role": "student", "level": 8,
+  "require": [ { "subject": "grade", "gte": "resource.level",
+                 "reason": "account-grade-below-report-level" } ]
+}
+```
+
+Operands are `subject.<attr>` / `resource.<attr>` / `literal:<value>` (a bare name
+resolves as a subject attribute, then as a resource attribute). Operators:
+`gte` `gt` `lte` `lt` `eq` `ne`. A denial shows both sides:
+`[require grade gte resource.level failed (got 6 vs 8) 'account-grade-below-report-level']`
+
+Step 8 adds the environment dimension: rules live in the resource table and are
 evaluated against runtime facts. Example — no admin actions outside business hours:
 
 ```json
@@ -74,9 +92,9 @@ Denials name the fact that fired:
 `[env.hour=22 violates 'no-admin-actions-outside-business-hours']`.
 
 > **Scope, stated honestly.** This is a deliberately small engine: role thresholds,
-> a stage whitelist, and a handful of environment primitives (`hour`, `weekday`,
-> `not_in` / `eq` / `ne`). It has **no** general expression language, **no** REVIEW
-> state, and **no** row-level filtering. See
+> a stage whitelist, a constrained attribute comparison (`require`), and a handful of
+> environment primitives (`hour`, `weekday`, `not_in` / `eq` / `ne`). It has **no**
+> general expression language, **no** REVIEW state, and **no** row-level filtering. See
 > [`docs/DESIGN-TRADEOFF.md`](docs/DESIGN-TRADEOFF.md) for what it can and cannot
 > do, and when you should reach for a gateway + standalone PDP instead.
 
@@ -131,8 +149,8 @@ Try a decision:
 ```sh
 curl -X POST http://127.0.0.1:8097/api/authorize \
   -H 'content-type: application/json' \
-  -d '{"project":"demo","user":"alice","res":"data","action":"read","stage":""}'
-# → {"project":"demo","user":"alice","decision":"PERMIT", ...}
+  -d '{"project":"project-a","user":"alice","res":"data","action":"read","stage":""}'
+# → {"project":"project-a","user":"alice","decision":"PERMIT", ...}
 ```
 
 ## Configuration

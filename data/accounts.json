@@ -3,7 +3,7 @@
     "admin": {
       "role": "admin",
       "stages": [],
-      "grade": 0,
+      "grade": 12,
       "title": "Administrator (full library)"
     },
     "alice": {
@@ -20,9 +20,9 @@
         "stage-1",
         "stage-2"
       ],
-      "grade": 0,
+      "grade": 3,
       "title": "Teacher"
     }
   },
-  "comment": "演示用身份种子：admin 为全库管理员，alice 是只授权 stage-1 的学生，bob 是授权 stage-1/stage-2 的教师。不含任何口令——登录哈希在运行时生成，不落在这个文件里。换成你自己的身份时直接改这里即可。"
+  "comment": "演示用身份种子：admin 为全库管理员（grade 12），alice 是只授权 stage-1 的学生（grade 6），bob 是授权 stage-1/stage-2 的教师（grade 3）。grade 用于跨属性比较——report 资源的 level 是 8，只有 grade ≥ 8 的账号可读，所以 alice 和 bob 都会被拒、admin 通过。不含任何口令：登录哈希在运行时生成，不落在这个文件里。"
 }

@@ -7,7 +7,7 @@
 // 运行：make example-decide  （由 Makefile 注入 STATE_DIR=examples/state，含 alice/bob 账号）
 import "../shared/abac.lume" as abac;
 
-// 1) 注入本消费方的资源表（与 data/resources.json 的 "demo" 项目同形）。
+// 1) 注入本消费方的资源表（与 data/resources.json 的 "project-a" 项目同形）。
 //    各消费方只改这张表，共享同一份 decide() 决策链。
 abac.configure({
   resources: {

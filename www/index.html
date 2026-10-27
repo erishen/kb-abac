@@ -159,7 +159,7 @@
       决策引擎 <code>shared/abac.lume</code> 被站点 <code>import</code> 进来，与站点同源、同一份逻辑。
     </p>
     <p>
-      默认拒绝（deny-by-default）：七步检查链任一不通过即短路返回 <code>DENY</code>，
+      默认拒绝（deny-by-default）：八步检查链任一不通过即短路返回 <code>DENY</code>，
       且每次拒绝都写入审计。
     </p>
     <div id="status">正在连接 /api/health …</div>
@@ -242,7 +242,7 @@
   <div class="grid3" style="margin-top:12px;">
     <div class="mod">
       <h3>abac.lume <span>决策引擎</span></h3>
-      <p>七步 deny-by-default 检查链：认证 → 资源 → 动作 → 账号 → 角色 → 学段 → <strong>环境</strong>。只依赖传进来的资源表与账号表，不发起任何网络请求。</p>
+      <p>八步 deny-by-default 检查链：认证 → 资源 → 动作 → 账号 → 角色 → 学段 → <strong>跨属性</strong> → <strong>环境</strong>。只依赖传进来的资源表与账号表，不发起任何网络请求。</p>
     </div>
     <div class="mod">
       <h3>admin.lume <span>账号 / 授权写口</span></h3>

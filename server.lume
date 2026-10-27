@@ -27,15 +27,26 @@ server {
 // 下面的表只是「JSON 读不到时」的兜底副本，两段得手工保持同步——兜底生效时
 // 会打日志，且 GET /api/resources 会回 from_file=false，漂移至少是看得见的。
 let FALLBACK_RESOURCES = {
-  demo: {
+  "project-a": {
     stage: { actions: ["read"], min_role: "student" },
     data:  { actions: ["read"], min_role: "student" },
-    admin: { actions: ["manage"], min_role: "admin" },
+    admin: {
+      actions: ["manage"], min_role: "admin",
+      env: { deny_when: [
+        { fact: "hour", not_in: [9, 18], reason: "no-admin-actions-outside-business-hours" },
+      ] },
+    },
+    report: {
+      actions: ["read"], min_role: "student", level: 8,
+      require: [
+        { subject: "grade", gte: "resource.level", reason: "account-grade-below-report-level" },
+      ],
+    },
   },
 };
 // 学段资源名（decide 第 6 步白名单检查）
 let FALLBACK_STAGE = {
-  demo: "stage",
+  "project-a": "stage",
 };
 
 // 读 data/resources.json（读不到 / 解析失败 → null，调用方回落兜底表）。

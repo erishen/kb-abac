@@ -1,6 +1,6 @@
 {
   "projects": {
-    "demo": {
+    "project-a": {
       "stage": {
         "actions": [
           "read"
@@ -30,11 +30,25 @@
             }
           ]
         }
+      },
+      "report": {
+        "actions": [
+          "read"
+        ],
+        "min_role": "student",
+        "level": 8,
+        "require": [
+          {
+            "subject": "grade",
+            "gte": "resource.level",
+            "reason": "account-grade-below-report-level"
+          }
+        ]
       }
     }
   },
   "stage_resource": {
-    "demo": "stage"
+    "project-a": "stage"
   },
-  "comment": "演示用资源表：资源 -> 允许动作 + 最低角色 + 可选 env 规则。引擎按 (user, res, action, stage, env) 决策：role 门槛、学段白名单，以及 env 段声明的运行期事实（这里 admin 资源禁止 9-18 点之外的管理操作）。stage_resource 指定哪个资源走学段白名单检查。改完即时生效，不用重建镜像。"
+  "comment": "演示用资源表：资源 -> 允许动作 + 最低角色 + 可选 require/env 规则。引擎按 (user, res, action, stage, env) 决策：角色门槛、学段白名单、跨属性比较（require：report 要求账号 grade ≥ 报告密级）、环境规则（env：admin 资源禁止 9-18 点之外的管理操作）。stage_resource 指定哪个资源走学段白名单检查。改完即时生效。"
 }

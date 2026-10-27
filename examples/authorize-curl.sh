@@ -13,7 +13,7 @@ curl -fsS --noproxy '*' "$BASE/api/health" \
   || { echo "站点未运行，请先 make docker（或 make dev）"; exit 1; }
 echo
 
-echo "==> POST $BASE/api/authorize  (project=demo)"
+echo "==> POST $BASE/api/authorize  (project=project-a)"
 call() {
   user="$1"; res="$2"; action="$3"; stage="$4"
   echo "--- decide(user=$user, res=$res, action=$action, stage=$stage)"
