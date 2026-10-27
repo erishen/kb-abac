@@ -1,8 +1,28 @@
 {
   "accounts": {
-    "admin": { "role": "admin",   "stages": [], "grade": 0, "title": "Administrator (full library)" },
-    "alice": { "role": "student", "stages": ["stage-1"], "grade": 6, "title": "Student" },
-    "bob":   { "role": "teacher", "stages": ["stage-1", "stage-2"], "grade": 0, "title": "Teacher" }
+    "admin": {
+      "role": "admin",
+      "stages": [],
+      "grade": 0,
+      "title": "Administrator (full library)"
+    },
+    "alice": {
+      "role": "student",
+      "stages": [
+        "stage-1"
+      ],
+      "grade": 6,
+      "title": "Student"
+    },
+    "bob": {
+      "role": "teacher",
+      "stages": [
+        "stage-1",
+        "stage-2"
+      ],
+      "grade": 0,
+      "title": "Teacher"
+    }
   },
-  "comment": "Demo account seed copied into the kb-auth-shared volume on first boot. Replace with your own identities via the admin API. No passwords are stored here - login hashes are generated at runtime into the shared volume."
+  "comment": "演示用身份种子：admin 为全库管理员，alice 是只授权 stage-1 的学生，bob 是授权 stage-1/stage-2 的教师。不含任何口令——登录哈希在运行时生成，不落在这个文件里。换成你自己的身份时直接改这里即可。"
 }

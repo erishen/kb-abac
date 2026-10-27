@@ -1,13 +1,28 @@
 {
   "projects": {
     "demo": {
-      "stage": { "actions": ["read"], "min_role": "student" },
-      "data":  { "actions": ["read"], "min_role": "student" },
-      "admin": { "actions": ["manage"], "min_role": "admin" }
+      "stage": {
+        "actions": [
+          "read"
+        ],
+        "min_role": "student"
+      },
+      "data": {
+        "actions": [
+          "read"
+        ],
+        "min_role": "student"
+      },
+      "admin": {
+        "actions": [
+          "manage"
+        ],
+        "min_role": "admin"
+      }
     }
   },
   "stage_resource": {
     "demo": "stage"
   },
-  "comment": "Demo-only resource table for the kb-auth service. The shared ABAC engine decides each request by (user, res, action, stage) using the account's role and stage grants. Add projects/resources here and re-run the service to experiment."
+  "comment": "演示用资源表：资源 -> 允许动作 + 最低角色。引擎按 (user, res, action, stage) 用账号角色与学段授权做决策。stage_resource 指定哪个资源需要走学段白名单检查。改完即时生效，不用重建镜像。"
 }
