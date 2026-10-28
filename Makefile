@@ -87,7 +87,7 @@ EXAMPLES := examples
 .PHONY: bootstrap test check engine-test dev docker docker-stop example-decide example-curl \
         demo demo-decide
 
-# 共享引擎三套单测（local/central/corrupt）+ 站点 server.lume 类型检查
+# 共享引擎六套单测（local/central/corrupt/grants/forge/auditfail）+ 站点 server.lume 类型检查
 # 引擎在 shared/ submodule 里，变量名按上游约定是 LUME_DIR（不是 LUME）：
 # 必须显式传下去，否则 -C shared 之后上游的默认相对路径会以 shared/ 为基准而落空。
 test: engine-test
