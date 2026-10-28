@@ -151,6 +151,11 @@ make example-curl  # once it's up: curl the /api/authorize endpoint with sample 
 make docker-stop
 ```
 
+> `make test` fails loudly if lume isn't resolvable — it will *not* report success on an
+> empty run. If you ever add a `grep FAIL`-style check here, pair it with an
+> "at least one PASS" assertion; the reasoning and the three times it has bitten us are in
+> [`kb-auth-shared`'s Known pitfalls](https://github.com/erishen/kb-auth-shared#known-pitfalls).
+
 Try a decision:
 
 ```sh

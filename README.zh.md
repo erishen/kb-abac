@@ -144,6 +144,11 @@ make example-curl  # 起好后：用样例 curl 调 /api/authorize
 make docker-stop
 ```
 
+> lume 解析不到时 `make test` 会明确报错，**不会**在空跑的情况下报告成功。
+> 若你在这里新增 `grep FAIL` 式的判定，请同时断言「至少出现过一条 PASS」；
+> 原因与本项目踩过的三次，见
+> [kb-auth-shared 的「已知坑」](https://github.com/erishen/kb-auth-shared#已知坑)。
+
 试一次决策：
 
 ```sh
