@@ -34,10 +34,10 @@ jobs:
           ASSET="lume-linux-x64"
           BASE="https://github.com/erishen/lume/releases/download/${LUME_VERSION}"
           mkdir -p "$RUNNER_TEMP/lume"
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/lume/a.tar.gz"      "$BASE/$ASSET.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/lume/$ASSET.tar.gz" "$BASE/$ASSET.tar.gz"
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/lume/$ASSET.sha256" "$BASE/$ASSET.sha256"
           cd "$RUNNER_TEMP/lume" && sha256sum -c "$ASSET.sha256"
-          tar -xzf a.tar.gz
+          tar -xzf "$ASSET.tar.gz"
           sudo install -m755 "$ASSET/bin/lume" /usr/local/bin/lume
           lume --version
 
@@ -59,7 +59,7 @@ jobs:
       - name: Smoke-test the running service
         run: |
           set -eu
-          docker run -d --name kd -p 127.0.0.1:18097:8097 kb-abac:ci
+          docker run -d --name kd -e ALLOW_ENV_OVERRIDE=1 -p 127.0.0.1:18097:8097 kb-abac:ci
           # 等待就绪：健康检查通过再继续，避免竞态导致的假失败
           for i in $(seq 1 30); do
             if curl -fsS -m 2 http://127.0.0.1:18097/api/health >/dev/null 2>&1; then break; fi
