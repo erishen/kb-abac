@@ -12,7 +12,7 @@
 #
 # 升级运行时只需改构建参数，不必改本文件：
 #   docker build --build-arg LUME_VERSION=v0.11.0 ...
-#   LUME_VERSION=v0.12.0 docker compose build
+#   LUME_VERSION=v0.12.2 docker compose build
 # 可用版本见 https://github.com/erishen/lume/releases
 #
 # build context = 仓库根（docker-compose.yml 里 context 设这里），故
@@ -33,7 +33,7 @@
 # 用 buildx 的 TARGETARCH 自动匹配 x64 / arm64，无需为两种架构各写一遍。
 FROM debian:bookworm-slim AS lume-fetch
 
-ARG LUME_VERSION=v0.11.0
+ARG LUME_VERSION=v0.12.2
 ARG TARGETARCH
 
 # 只装下载 + 解包 + 校验所需的最小工具；--no-install-recommends 控制体积。
