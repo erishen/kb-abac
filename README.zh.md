@@ -174,3 +174,6 @@ curl -X POST http://127.0.0.1:8097/api/authorize \
 MIT —— 见 [`LICENSE`](LICENSE)。`shared/` 是 git submodule，自带上游
 [`kb-auth-shared`](https://github.com/erishen/kb-auth-shared) 的 `LICENSE`；该仓库是规范上游。
 本仓库是演示快照。
+
+## 相关文章
+- [进程内 ABAC 决策引擎：为了砍掉每次授权的一跳网络，我把判定塞进了站点自己的进程](https://erishen.cn/kb_abac/)

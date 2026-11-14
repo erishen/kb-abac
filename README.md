@@ -176,6 +176,9 @@ curl -X POST http://127.0.0.1:8097/api/authorize \
 Secrets are never committed: `.env`, `logs/`, and runtime `state/` are gitignored.
 The repo ships only `.env.example` and a demo seed `data/accounts.json` (no passwords).
 
+## Related Articles
+- [In-Process ABAC Decision Engine: To Cut a Network Hop From Every Authorization, I Moved the Decision Into the Site's Own Process](https://erishen.cn/kb_abac-en/)
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE). `shared/` is a git submodule and carries its own
